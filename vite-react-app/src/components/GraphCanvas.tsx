@@ -36,16 +36,25 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
   const [drag, setDrag] = useState<DragState | null>(null);
   const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
   const [hoverPort, setHoverPort] = useState<{ nodeId: string; portId: string; dir: 'in' | 'out' } | null>(null);
+  const [view, setView] = useState({ offsetX: 0, offsetY: 0, scale: 1 });
+  const panningRef = useRef(false);
+  const lastPan = useRef({ x: 0, y: 0 });
 
   const onMouseMove = useCallback((e: React.MouseEvent) => {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const x = (e.clientX - rect.left - view.offsetX) / view.scale;
+    const y = (e.clientY - rect.top - view.offsetY) / view.scale;
     setCursorPos({ x, y });
     if (drag) {
       onNodePositionChange(drag.id, x - drag.offsetX, y - drag.offsetY);
     }
-  }, [drag, onNodePositionChange]);
+    if (panningRef.current) {
+      const dx = e.clientX - lastPan.current.x;
+      const dy = e.clientY - lastPan.current.y;
+      lastPan.current = { x: e.clientX, y: e.clientY };
+      setView(v => ({ ...v, offsetX: v.offsetX + dx, offsetY: v.offsetY + dy }));
+    }
+  }, [drag, onNodePositionChange, view.offsetX, view.offsetY, view.scale]);
 
   const onMouseUp = useCallback(() => {
     setDrag(null);
@@ -68,6 +77,21 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     setDrag({ id: node.id, offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top });
     onSelectNode(node.id);
+  };
+
+  const startPan = (e: React.MouseEvent) => {
+    if (e.button !== 1 && (e.button !== 0 || e.shiftKey === false)) return; // środkowy lub shift+LPM
+    panningRef.current = true;
+    lastPan.current = { x: e.clientX, y: e.clientY };
+  };
+
+  const onWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    const scaleFactor = e.deltaY > 0 ? 0.9 : 1.1;
+    setView(v => {
+      const newScale = Math.min(2.5, Math.max(0.4, v.scale * scaleFactor));
+      return { ...v, scale: newScale };
+    });
   };
 
   const startConnection = (e: React.MouseEvent, nodeId: string, portId: string, type: 'in' | 'out') => {
@@ -96,6 +120,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
       onCancelPending();
       onSelectNode('');
     }
+    panningRef.current = false;
   };
 
   const strokeFor = (c: Connection) => '#3b82f6';
@@ -114,7 +139,8 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
   };
 
   return (
-    <div className="graph-canvas" onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseDown={cancel}>
+    <div className="graph-canvas" onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseDown={cancel} onWheel={onWheel}>
+      <div className="graph-inner" style={{ transform: `translate(${view.offsetX}px, ${view.offsetY}px) scale(${view.scale})`, transformOrigin:'0 0', width:'100%', height:'100%' }} onMouseDown={startPan}>
       <svg ref={svgRef} className="graph-svg">
         {connections.map(c => {
           const fromNode = nodes.find(n => n.id === c.from.nodeId);
@@ -139,7 +165,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
           return <path d={path} stroke="#3b82f6AA" fill="none" strokeWidth={2} strokeDasharray="4 4" />;
         })()}
       </svg>
-      {nodes.map(node => (
+  {nodes.map(node => (
         <div key={node.id} className={"graph-node" + (node.id === selectedNodeId ? ' selected' : '')} style={{ left: node.x, top: node.y }} onMouseDown={e => startDrag(e, node)}>
           <div className="node-header" onDoubleClick={() => onSelectNode(node.id)}>{node.title}</div>
           <div className="ports">
@@ -175,7 +201,8 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
             </div>
           </div>
         </div>
-      ))}
+  ))}
+  </div>
     </div>
   );
 };

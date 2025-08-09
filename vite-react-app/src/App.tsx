@@ -89,6 +89,10 @@ export const App: React.FC = () => {
     setConnections(cs => cs.filter(c => c.id !== id));
   }, []);
 
+  const updateNode = useCallback((id: string, patch: Partial<GraphNode>) => {
+    setNodes(ns => ns.map(n => n.id === id ? { ...n, ...patch, params: patch.params ? { ...patch.params } : n.params } : n));
+  }, []);
+
   return (
     <div className="layout-root">
       <Sidebar
@@ -117,7 +121,7 @@ export const App: React.FC = () => {
         </div>
         <aside className="right-pane">
           <MapPreview3D nodes={nodes} connections={connections} />
-          <Inspector selectedNode={nodes.find(n => n.id === selectedNodeId)} connections={connections} />
+          <Inspector selectedNode={nodes.find(n => n.id === selectedNodeId)} connections={connections} onUpdateNode={updateNode} />
         </aside>
       </main>
     </div>
